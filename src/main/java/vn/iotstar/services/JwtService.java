@@ -1,34 +1,40 @@
 package vn.iotstar.services;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
+import com.nimbusds.jose.*;
+import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jose.crypto.MACVerifier;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
+import java.text.ParseException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Function;
 
 /**
- * JwtService - Handles JWT token generation and validation using JJWT 0.12.6
+ * JwtService - Viết lại bằng Nimbus JOSE + JWT 9.37.3
  *
- * Sử dụng thuật toán HS256 (HMAC-SHA256) với khóa bí mật dạng Hex.
+ * Nimbus API:
+ *  - Tạo token : JWSHeader + JWTClaimsSet + SignedJWT + MACSigner (HS256)
+ *  - Xác thực  : SignedJWT.verify(MACVerifier)
+ *  - Đọc claims: SignedJWT.getJWTClaimsSet()
+ *
+ * Không dùng JJWT, không dùng Jwts.builder() / Jwts.parser()
  */
 @Service
 public class JwtService {
 
     /**
-     * Secret key in Hex format (256-bit) loaded from application.properties
+     * Secret key in Hex format (256-bit) từ application.properties
      */
     @Value("${security.jwt.secret-key}")
     private String secretKey;
 
     /**
-     * Token expiration time in milliseconds (e.g., 3600000 = 1 hour)
+     * Thời hạn token (milliseconds): 3600000 = 1 giờ
      */
     @Value("${security.jwt.expiration-time}")
     private long jwtExpiration;
@@ -38,43 +44,109 @@ public class JwtService {
     // ============================================================
 
     /**
-     * Generate a JWT token for the given UserDetails (no extra claims)
+     * Sinh JWT token cho UserDetails (không extra claims)
      */
     public String generateToken(UserDetails userDetails) {
         return generateToken(new HashMap<>(), userDetails);
     }
 
     /**
-     * Generate a JWT token with extra claims
+     * Sinh JWT token kèm extra claims tùy chỉnh
+     *
+     * @param extraClaims map of additional claims to embed in payload
+     * @param userDetails the authenticated user
+     * @return signed JWT string
      */
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
-        return buildToken(extraClaims, userDetails, jwtExpiration);
+        try {
+            // 1. Tạo JWSHeader với thuật toán HS256
+            JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.HS256)
+                    .type(JOSEObjectType.JWT)
+                    .build();
+
+            // 2. Xây dựng JWTClaimsSet (payload)
+            JWTClaimsSet.Builder claimsBuilder = new JWTClaimsSet.Builder()
+                    .subject(userDetails.getUsername())             // sub = email
+                    .issueTime(new Date())                          // iat = now
+                    .expirationTime(new Date(                       // exp = now + expiration
+                            System.currentTimeMillis() + jwtExpiration));
+
+            // Thêm extra claims
+            for (Map.Entry<String, Object> entry : extraClaims.entrySet()) {
+                claimsBuilder.claim(entry.getKey(), entry.getValue());
+            }
+
+            JWTClaimsSet claimsSet = claimsBuilder.build();
+
+            // 3. Tạo SignedJWT từ header và claims
+            SignedJWT signedJWT = new SignedJWT(header, claimsSet);
+
+            // 4. Ký bằng MACSigner (HMAC-SHA256) với secret key bytes
+            MACSigner signer = new MACSigner(hexStringToByteArray(secretKey));
+            signedJWT.sign(signer);
+
+            // 5. Serialize thành chuỗi compact "eyJ...header.payload.signature"
+            return signedJWT.serialize();
+
+        } catch (JOSEException e) {
+            throw new RuntimeException("Lỗi khi tạo JWT token bằng Nimbus: " + e.getMessage(), e);
+        }
     }
 
     /**
-     * Get the expiration time value (milliseconds)
+     * Trích xuất username (subject) từ JWT token
+     *
+     * @param token chuỗi JWT
+     * @return email của user
+     */
+    public String extractUsername(String token) {
+        try {
+            return parseSignedJWT(token).getJWTClaimsSet().getSubject();
+        } catch (ParseException e) {
+            throw new RuntimeException("Lỗi parse JWT token: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Kiểm tra token có hợp lệ không (chữ ký đúng + chưa hết hạn + đúng user)
+     *
+     * @param token       chuỗi JWT cần kiểm tra
+     * @param userDetails thông tin user cần so khớp
+     * @return true nếu token hợp lệ
+     */
+    public boolean isTokenValid(String token, UserDetails userDetails) {
+        try {
+            SignedJWT signedJWT = parseSignedJWT(token);
+
+            // 1. Xác thực chữ ký bằng MACVerifier
+            MACVerifier verifier = new MACVerifier(hexStringToByteArray(secretKey));
+            boolean signatureValid = signedJWT.verify(verifier);
+
+            if (!signatureValid) {
+                return false;
+            }
+
+            // 2. Kiểm tra username khớp
+            String subject = signedJWT.getJWTClaimsSet().getSubject();
+            if (!subject.equals(userDetails.getUsername())) {
+                return false;
+            }
+
+            // 3. Kiểm tra token chưa hết hạn
+            Date expiration = signedJWT.getJWTClaimsSet().getExpirationTime();
+            return expiration != null && expiration.after(new Date());
+
+        } catch (ParseException | JOSEException e) {
+            // Token lỗi cú pháp hoặc chữ ký sai → không hợp lệ
+            return false;
+        }
+    }
+
+    /**
+     * Lấy thời hạn token (milliseconds) — dùng cho LoginResponse
      */
     public long getExpirationTime() {
         return jwtExpiration;
-    }
-
-    /**
-     * Extract the username (subject) from a JWT token
-     */
-    public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
-    }
-
-    /**
-     * Validate a JWT token against the given UserDetails
-     *
-     * @param token       the JWT token string
-     * @param userDetails the expected user
-     * @return true if token is valid and not expired
-     */
-    public boolean isTokenValid(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
     }
 
     // ============================================================
@@ -82,68 +154,21 @@ public class JwtService {
     // ============================================================
 
     /**
-     * Build the JWT token using JJWT 0.12.6 API
-     */
-    private String buildToken(
-            Map<String, Object> extraClaims,
-            UserDetails userDetails,
-            long expiration
-    ) {
-        return Jwts.builder()
-                .claims(extraClaims)                              // extra claims first
-                .subject(userDetails.getUsername())               // set subject = email
-                .issuedAt(new Date(System.currentTimeMillis()))   // issued now
-                .expiration(new Date(System.currentTimeMillis() + expiration)) // expires in
-                .signWith(getSigningKey())                        // sign with HS256 key
-                .compact();                                       // produce compact string
-    }
-
-    /**
-     * Check whether a token has expired
-     */
-    private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
-    }
-
-    /**
-     * Extract the expiration date from the token
-     */
-    private Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
-    }
-
-    /**
-     * Generic claim extractor using a claims resolver function
-     */
-    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
-        final Claims claims = extractAllClaims(token);
-        return claimsResolver.apply(claims);
-    }
-
-    /**
-     * Parse and return all claims from the JWT token using JJWT 0.12.6 API
-     */
-    private Claims extractAllClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())    // set the signing key for verification
-                .build()
-                .parseSignedClaims(token)       // parse the signed JWT (new API in 0.12.x)
-                .getPayload();                  // get claims payload
-    }
-
-    /**
-     * Build the SecretKey from the Hex-encoded secret string.
-     * Keys.hmacShaKeyFor() accepts raw bytes; we decode the Hex string first.
-     */
-    private SecretKey getSigningKey() {
-        byte[] keyBytes = hexStringToByteArray(secretKey);
-        return Keys.hmacShaKeyFor(keyBytes);
-    }
-
-    /**
-     * Convert a Hex string to a byte array
+     * Parse chuỗi JWT thành SignedJWT object của Nimbus
      *
-     * @param hex a valid Hex string (even number of characters)
+     * @param token chuỗi JWT
+     * @return SignedJWT đã parse
+     * @throws ParseException nếu chuỗi không đúng định dạng JWT
+     */
+    private SignedJWT parseSignedJWT(String token) throws ParseException {
+        return SignedJWT.parse(token);
+    }
+
+    /**
+     * Chuyển chuỗi Hex sang mảng byte[]
+     * Ví dụ: "4A61..." → new byte[]{0x4A, 0x61, ...}
+     *
+     * @param hex chuỗi Hex hợp lệ (số ký tự chẵn)
      * @return byte array
      */
     private byte[] hexStringToByteArray(String hex) {
