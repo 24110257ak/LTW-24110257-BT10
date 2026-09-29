@@ -15,7 +15,7 @@
     <artifactId>bt10-jwt</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>bt10-jwt</name>
-    <description>Spring Boot JWT Authentication - BT10 (Nimbus JOSE + JWT)</description>
+    <description>Spring Boot JWT Authentication - BT10</description>
     <packaging>jar</packaging>
 
     <properties>
@@ -53,10 +53,10 @@
             <artifactId>thymeleaf-extras-springsecurity6</artifactId>
         </dependency>
 
-        <!-- Microsoft SQL Server Driver (SSMS) -->
+        <!-- MySQL Driver -->
         <dependency>
-            <groupId>com.microsoft.sqlserver</groupId>
-            <artifactId>mssql-jdbc</artifactId>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
 
@@ -67,15 +67,27 @@
             <optional>true</optional>
         </dependency>
 
-        <!--
-            NIMBUS JOSE + JWT (thay thế hoàn toàn JJWT)
-            Thư viện Java mạnh mẽ để xử lý JOSE, JWK, JWT
-            Hỗ trợ: JWS (ký số), JWE (mã hóa), JWK, JWKS, JWT
-        -->
+        <!-- JJWT API -->
         <dependency>
-            <groupId>com.nimbusds</groupId>
-            <artifactId>nimbus-jose-jwt</artifactId>
-            <version>9.37.3</version>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.6</version>
+        </dependency>
+
+        <!-- JJWT Implementation -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- JJWT Jackson (JSON parser) -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.6</version>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- Spring Boot Test -->
