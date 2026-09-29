@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hồ Sơ Cá Nhân - JWT Spring Boot</title>
+    <!-- Bootstrap 5 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .navbar-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .profile-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-top: 40px;
+        }
+
+        .profile-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 30px;
+            text-align: center;
+            color: white;
+        }
+
+        .avatar-circle {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            font-size: 48px;
+            border: 4px solid rgba(255,255,255,0.5);
+        }
+
+        .profile-body {
+            padding: 30px;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .info-item:last-child {
+            border-bottom: none;
+        }
+
+        .info-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .info-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .badge-jwt {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-logout {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            padding: 10px 25px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-logout:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(245, 87, 108, 0.4);
+            color: white;
+        }
+
+        .token-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .token-value {
+            font-family: monospace;
+            font-size: 11px;
+            word-break: break-all;
+            color: #6c757d;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            max-height: 80px;
+            overflow-y: auto;
+        }
+
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark navbar-custom">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#">
+                <i class="fas fa-shield-alt me-2"></i>JWT Auth System
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge badge-jwt px-3 py-2">
+                    <i class="fas fa-user me-1"></i>
+                    <span id="navUserName">Đang tải...</span>
+                </span>
+                <button class="btn btn-logout btn-sm" id="btnLogout">
+                    <i class="fas fa-sign-out-alt me-1"></i>Đăng xuất
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container" style="max-width: 600px;">
+        <!-- Profile Card -->
+        <div class="profile-card">
+            <!-- Header -->
+            <div class="profile-header">
+                <div class="avatar-circle">
+                    <i class="fas fa-user"></i>
+                </div>
+                <h3 class="mb-1" id="profileName">
+                    <div class="spinner-border spinner-border-sm text-white" role="status"></div>
+                </h3>
+                <p class="mb-0 opacity-75">
+                    <span class="badge bg-white text-primary">Người dùng đã xác thực</span>
+                </p>
+            </div>
+
+            <!-- Body -->
+            <div class="profile-body" id="profileBody">
+                <!-- Loading state -->
+                <div class="loading-spinner" id="loadingState">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Đang tải...</span>
+                    </div>
+                    <span class="ms-3 text-muted">Đang tải thông tin...</span>
+                </div>
+
+                <!-- User Info (hidden until loaded) -->
+                <div id="userInfoSection" style="display: none;">
+                    <!-- ID -->
+                    <div class="info-item">
+                        <div class="info-icon">
+                            <i class="fas fa-hashtag"></i>
+                        </div>
+                        <div>
+                            <div class="info-label">ID người dùng</div>
+                            <div class="info-value" id="userId">-</div>
+                        </div>
+                    </div>
+
+                    <!-- Full Name -->
+                    <div class="info-item">
+                        <div class="info-icon">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div>
+                            <div class="info-label">Họ và tên</div>
+                            <div class="info-value" id="userFullName">-</div>
+                        </div>
+                    </div>
+
+                    <!-- Email -->
+                    <div class="info-item">
+                        <div class="info-icon">
+                            <i class="fas fa-envelope"></i>
+                        </div>
+                        <div>
+                            <div class="info-label">Email (Username)</div>
+                            <div class="info-value" id="userEmail">-</div>
+                        </div>
+                    </div>
+
+                    <!-- Joined -->
+                    <div class="info-item">
+                        <div class="info-icon">
+                            <i class="fas fa-calendar-alt"></i>
+                        </div>
+                        <div>
+                            <div class="info-label">Ngày tham gia</div>
+                            <div class="info-value" id="userCreatedAt">-</div>
+                        </div>
+                    </div>
+
+                    <!-- Status -->
+                    <div class="info-item">
+                        <div class="info-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div>
+                            <div class="info-label">Trạng thái tài khoản</div>
+                            <div class="info-value">
+                                <span class="badge bg-success">
+                                    <i class="fas fa-circle me-1" style="font-size: 8px;"></i>Đang hoạt động
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- JWT Token Section -->
+                <div class="token-section">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <small class="fw-bold text-muted">
+                            <i class="fas fa-key me-1 text-warning"></i>JWT Token (đang dùng)
+                        </small>
+                        <button class="btn btn-outline-secondary btn-sm py-0 px-2" onclick="copyToken()">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    <div class="token-value" id="tokenDisplay">Chưa có token</div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-flex gap-2 mt-3" id="actionButtons" style="display: none !important;">
+                    <a href="/login" class="btn btn-outline-primary flex-fill rounded-pill">
+                        <i class="fas fa-sign-in-alt me-1"></i>Đăng nhập khác
+                    </a>
+                    <button class="btn btn-danger flex-fill rounded-pill" id="btnLogout2">
+                        <i class="fas fa-sign-out-alt me-1"></i>Đăng xuất
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-4 mb-4">
+            <small class="text-muted">
+                <i class="fas fa-lock me-1"></i>
+                Được bảo mật bởi <strong>Spring Security + JWT</strong> |
+                Branch: <strong id="branchName">main (JJWT)</strong>
+            </small>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script th:src="@{/js/mainjs.js}"></script>
+</body>
+</html>
